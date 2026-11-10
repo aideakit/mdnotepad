@@ -1,0 +1,2 @@
+// Toolbar icon of the plugin (see tools/make_icon.py). The id is IDI_TOOLBAR in src/plugin.cpp.
+101 ICON "mdnotepad.ico"

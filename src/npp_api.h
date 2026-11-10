@@ -71,14 +71,23 @@ struct SCNotification {
 #define NPPM_DMMREGASDCKDLG (NPPMSG + 33)
 #define NPPM_SETMENUITEMCHECK (NPPMSG + 40)
 #define NPPM_GETPLUGINSCONFIGDIR (NPPMSG + 46)
+#define NPPM_ADDTOOLBARICON_FORDARKMODE (NPPMSG + 101)
 #define RUNCOMMAND_USER (WM_USER + 3000)
 #define NPPM_GETFULLCURRENTPATH (RUNCOMMAND_USER + 1)
 
 // ---- Notepad++ notifications ----
 #define NPPN_FIRST 1000
 #define NPPN_READY (NPPN_FIRST + 1)
+#define NPPN_TBMODIFICATION (NPPN_FIRST + 2)
 #define NPPN_SHUTDOWN (NPPN_FIRST + 9)
 #define NPPN_BUFFERACTIVATED (NPPN_FIRST + 10)
+
+// Toolbar button, sent with NPPM_ADDTOOLBARICON_FORDARKMODE while handling NPPN_TBMODIFICATION.
+struct toolbarIconsWithDarkMode {
+    HBITMAP _hBmp;
+    HICON _hIcon;
+    HICON _hIconDarkMode;
+};
 
 // ---- docking ----
 #define CONT_RIGHT 1

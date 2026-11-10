@@ -57,10 +57,10 @@ if (-not $VcVars) {
 if (-not $VcVars -or -not (Test-Path $VcVars)) { throw 'vcvars64.bat not found; pass -VcVars <path>' }
 
 $dll = Join-Path $out 'mdnotepad.dll'
-$cmd = "`"$VcVars`" >nul && cl /nologo /std:c++17 /O2 /MT /EHsc /W3 /LD " +
+$cmd = "`"$VcVars`" >nul && rc /nologo /fo `"$obj\mdnotepad.res`" `"$root\resources\mdnotepad.rc`" && cl /nologo /std:c++17 /O2 /MT /EHsc /W3 /LD " +
     "/I `"$wv2\include`" `"$root\src\plugin.cpp`" /Fo`"$obj\\`" /Fe`"$dll`" " +
-    "/link /nologo /IMPLIB:`"$obj\mdnotepad.lib`" `"$wv2\x64\WebView2LoaderStatic.lib`" " +
-    "user32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib comdlg32.lib version.lib"
+    "/link /nologo /IMPLIB:`"$obj\mdnotepad.lib`" `"$obj\mdnotepad.res`" `"$wv2\x64\WebView2LoaderStatic.lib`" " +
+    "user32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib comdlg32.lib gdi32.lib version.lib"
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw 'cl failed' }
 

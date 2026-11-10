@@ -35,6 +35,7 @@ const wchar_t* const kAppHost = L"mdnotepad.plugin";
 const wchar_t* const kAppUrlPrefix = L"https://mdnotepad.plugin/";
 const UINT_PTR kUpdateTimer = 1;
 const UINT kUpdateDelayMs = 120;
+const int IDI_TOOLBAR = 101;  // resources/mdnotepad.rc
 
 enum Command { CMD_TOGGLE, CMD_SYNC, CMD_DARK, CMD_SEPARATOR, CMD_PDF, CMD_ABOUT, CMD_COUNT };
 
@@ -614,6 +615,7 @@ void HidePanel() {
 // ---------------------------------------------------------------- menu commands
 
 void CmdToggle() {
+    Log(L"toggle command (open=%d)", g_visible ? 1 : 0);
     if (g_visible) {
         HidePanel();
     } else {
@@ -689,6 +691,36 @@ void CmdAbout() {
                 kPluginName, MB_OK | MB_ICONINFORMATION);
 }
 
+// Adds the "mn" button to the Notepad++ toolbar; it runs the "Show/hide preview panel" command.
+void AddToolbarButton() {
+    UINT dpi = 96;
+    using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+    auto getDpi = reinterpret_cast<GetDpiForWindowFn>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (getDpi) {
+        dpi = getDpi(g_npp._nppHandle);
+    }
+    int size = MulDiv(16, (int)dpi, 96);
+    HICON icon = (HICON)LoadImageW(g_hInst, MAKEINTRESOURCEW(IDI_TOOLBAR), IMAGE_ICON, size, size, LR_DEFAULTCOLOR);
+    if (!icon) {
+        Log(L"toolbar icon not loaded: %u", GetLastError());
+        return;
+    }
+    HBITMAP bitmap = nullptr;
+    ICONINFO info = {};
+    if (GetIconInfo(icon, &info)) {
+        bitmap = info.hbmColor;
+        if (info.hbmMask) {
+            DeleteObject(info.hbmMask);
+        }
+    }
+    // Notepad++ keeps using these handles, so they live until the process ends.
+    static toolbarIconsWithDarkMode icons;
+    icons = {bitmap, icon, icon};
+    NppSend(NPPM_ADDTOOLBARICON_FORDARKMODE, (WPARAM)g_funcs[CMD_TOGGLE]._cmdID, (LPARAM)&icons);
+    Log(L"toolbar button added (size %d, cmd %d)", size, g_funcs[CMD_TOGGLE]._cmdID);
+}
+
 void InitFuncItem(Command command, const wchar_t* name, PFUNCPLUGINCMD func, bool checked, ShortcutKey* key) {
     FuncItem& item = g_funcs[command];
     wcsncpy_s(item._itemName, name, _TRUNCATE);
@@ -756,6 +788,9 @@ __declspec(dllexport) void beNotified(SCNotification* notification) {
                     g_visible = false;
                     ShowPanel();
                 }
+                break;
+            case NPPN_TBMODIFICATION:
+                AddToolbarButton();
                 break;
             case NPPN_BUFFERACTIVATED:
                 if (g_visible) {

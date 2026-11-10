@@ -26,6 +26,7 @@ Requires Notepad++ x64 and the Microsoft Edge WebView2 Runtime (preinstalled on 
 | Dark theme | Dark preview |
 | Export PDF... | Saves the preview as an A4 PDF |
 
+The same toggle is available as the **mn** button at the end of the toolbar.
 Settings are stored in `plugins\Config\mdnotepad.ini`.
 
 ## Build

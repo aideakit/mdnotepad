@@ -5,3 +5,4 @@ third_party/
 Temp/
 WORKLOG.md
 *.log
+resources/*.preview.png
