@@ -1,0 +1,3 @@
+[briefing]
+inject_on_session_start = "true"
+max_chars = 4000

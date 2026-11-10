@@ -1,0 +1,19 @@
+{
+  "name": "mdnotepad",
+  "version": "1.0.0",
+  "description": "Live Markdown preview plugin for Notepad++ (x64, WebView2)",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "pwsh -NoProfile -File build.ps1"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17",
+    "github-markdown-css": "^5.9.0",
+    "marked": "^15.0.12",
+    "mermaid": "^11.17.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

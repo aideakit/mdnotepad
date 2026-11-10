@@ -1,0 +1,104 @@
+/* Layout and diagrams; the Markdown look itself comes from github-markdown-css. */
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #ffffff;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background: #212830;
+}
+
+#content {
+  padding: 8px 16px 16px;
+}
+
+.markdown-body .mermaid {
+  padding: 16px;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-body .mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.markdown-body .mermaid-error {
+  color: #cf222e;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+html[data-theme="dark"] .markdown-body .mermaid-error {
+  color: #ff7b72;
+}
+
+/* PDF export: A4, no screen padding, keep blocks and headings together. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html,
+  body,
+  #content,
+  #output {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    background: #ffffff;
+    color: #24292f;
+  }
+
+  .markdown-body {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .markdown-body .mermaid {
+    margin: 16px 0;
+    padding: 12px 0;
+    overflow: visible;
+    break-inside: avoid;
+  }
+
+  .markdown-body .mermaid svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    background: #ffffff;
+    color-scheme: light;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
+    break-after: avoid;
+  }
+
+  .markdown-body p,
+  .markdown-body li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .markdown-body pre,
+  .markdown-body blockquote,
+  .markdown-body table,
+  .markdown-body img {
+    max-width: 100%;
+    break-inside: avoid;
+  }
+}
