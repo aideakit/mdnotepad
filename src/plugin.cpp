@@ -37,7 +37,7 @@ const UINT_PTR kUpdateTimer = 1;
 const UINT kUpdateDelayMs = 120;
 const int IDI_TOOLBAR = 101;  // resources/mdnotepad.rc
 
-enum Command { CMD_TOGGLE, CMD_SYNC, CMD_DARK, CMD_SEPARATOR, CMD_PDF, CMD_ABOUT, CMD_COUNT };
+enum Command { CMD_TOGGLE, CMD_SYNC, CMD_DARK, CMD_EDIT, CMD_SEPARATOR, CMD_PDF, CMD_ABOUT, CMD_COUNT };
 
 HINSTANCE g_hInst = nullptr;
 NppData g_npp = {};
@@ -50,6 +50,8 @@ bool g_dockRegistered = false;
 bool g_visible = false;        // the panel is open (user intent)
 bool g_syncScroll = true;
 bool g_dark = false;
+bool g_editable = true;         // text can be edited in the preview
+bool g_applyingPageEdit = false; // the editor is being changed by an edit made in the preview
 bool g_initStarted = false;
 bool g_pageReady = false;
 bool g_logEnabled = false;
@@ -125,11 +127,13 @@ void LoadSettings() {
     g_syncScroll = GetPrivateProfileIntW(L"Preview", L"SyncScroll", 1, g_iniPath.c_str()) != 0;
     g_dark = GetPrivateProfileIntW(L"Preview", L"Dark", 0, g_iniPath.c_str()) != 0;
     g_visible = GetPrivateProfileIntW(L"Preview", L"Visible", 0, g_iniPath.c_str()) != 0;
+    g_editable = GetPrivateProfileIntW(L"Preview", L"Editable", 1, g_iniPath.c_str()) != 0;
 }
 
 void SaveSettings() {
     WritePrivateProfileStringW(L"Preview", L"SyncScroll", g_syncScroll ? L"1" : L"0", g_iniPath.c_str());
     WritePrivateProfileStringW(L"Preview", L"Dark", g_dark ? L"1" : L"0", g_iniPath.c_str());
+    WritePrivateProfileStringW(L"Preview", L"Editable", g_editable ? L"1" : L"0", g_iniPath.c_str());
     WritePrivateProfileStringW(L"Preview", L"Visible", g_visible ? L"1" : L"0", g_iniPath.c_str());
 }
 
@@ -278,6 +282,38 @@ void SendScroll(bool force) {
     PostJson(L"{\"type\":\"scroll\",\"ppm\":" + std::to_wstring(ppm) + L"}");
 }
 
+std::string DocumentBytes(HWND sci) {
+    LRESULT length = SendMessageW(sci, SCI_GETLENGTH, 0, 0);
+    std::string bytes((size_t)length + 1, '\0');
+    SendMessageW(sci, SCI_GETTEXT, (WPARAM)length + 1, (LPARAM)&bytes[0]);
+    bytes.resize((size_t)length);
+    return bytes;
+}
+
+UINT DocumentCodePage(HWND sci) {
+    UINT codePage = (UINT)SendMessageW(sci, SCI_GETCODEPAGE, 0, 0);
+    return codePage == 0 ? CP_ACP : codePage;
+}
+
+// lossy is set when a character has no equivalent in the code page (it becomes '?').
+std::string WideToCodePage(const std::wstring& text, UINT codePage, bool* lossy) {
+    *lossy = false;
+    if (text.empty()) {
+        return "";
+    }
+    BOOL usedDefault = FALSE;
+    BOOL* usedDefaultArg = codePage == CP_UTF8 ? nullptr : &usedDefault;  // must be null for UTF-8
+    int n = WideCharToMultiByte(codePage, 0, text.data(), (int)text.size(), nullptr, 0, nullptr, usedDefaultArg);
+    if (n <= 0) {
+        *lossy = true;
+        return "";
+    }
+    std::string bytes(n, '\0');
+    WideCharToMultiByte(codePage, 0, text.data(), (int)text.size(), &bytes[0], n, nullptr, usedDefaultArg);
+    *lossy = usedDefault != FALSE;
+    return bytes;
+}
+
 void SendDocument() {
     if (!g_pageReady || !g_view) {
         return;
@@ -285,15 +321,70 @@ void SendDocument() {
     UpdateDocumentFolder();
 
     HWND sci = CurrentScintilla();
-    LRESULT length = SendMessageW(sci, SCI_GETLENGTH, 0, 0);
-    std::string bytes((size_t)length + 1, '\0');
-    SendMessageW(sci, SCI_GETTEXT, (WPARAM)length + 1, (LPARAM)&bytes[0]);
-    bytes.resize((size_t)length);
-
-    UINT codePage = (UINT)SendMessageW(sci, SCI_GETCODEPAGE, 0, 0);
-    std::wstring text = Utf8OrAnsiToWide(bytes, codePage == 0 ? CP_ACP : codePage);
+    std::wstring text = Utf8OrAnsiToWide(DocumentBytes(sci), DocumentCodePage(sci));
+    LRESULT eol = SendMessageW(sci, SCI_GETEOLMODE, 0, 0);
+    PostJson(L"{\"type\":\"eol\",\"mode\":" + std::to_wstring((int)eol) + L"}");
     g_view->PostWebMessageAsString(text.c_str());
     SendScroll(true);
+}
+
+// The page sends the whole new text after an edit in the preview. Only the part that differs from the editor's
+// text is replaced, as one undo step, so the caret, folding, bookmarks and undo history of the rest stay as they are.
+void ApplyPageEdit(const std::wstring& text) {
+    HWND sci = CurrentScintilla();
+    if (!g_editable || SendMessageW(sci, SCI_GETREADONLY, 0, 0)) {
+        SendDocument();  // the page already shows the edit; put the editor's text back
+        return;
+    }
+    UINT codePage = DocumentCodePage(sci);
+    bool lossy = false;
+    std::string next = WideToCodePage(text, codePage, &lossy);
+    std::string current = DocumentBytes(sci);
+
+    size_t limit = current.size() < next.size() ? current.size() : next.size();
+    size_t prefix = 0;
+    while (prefix < limit && current[prefix] == next[prefix]) {
+        ++prefix;
+    }
+    size_t suffix = 0;
+    while (suffix < limit - prefix && current[current.size() - 1 - suffix] == next[next.size() - 1 - suffix]) {
+        ++suffix;
+    }
+    CPINFO info = {};
+    if (codePage == CP_UTF8) {
+        // do not split a multi-byte character
+        auto continuation = [](const std::string& s, size_t i) {
+            return i < s.size() && ((unsigned char)s[i] & 0xC0) == 0x80;
+        };
+        while (prefix > 0 && (continuation(current, prefix) || continuation(next, prefix))) {
+            --prefix;
+        }
+        while (suffix > 0 && (continuation(current, current.size() - suffix) || continuation(next, next.size() - suffix))) {
+            --suffix;
+        }
+    } else if (GetCPInfo(codePage, &info) && info.MaxCharSize > 1) {
+        prefix = 0;  // double-byte code page: replace the whole text rather than risk splitting a character
+        suffix = 0;
+    }
+    size_t removeEnd = current.size() - suffix;
+    size_t insertLength = next.size() - suffix - prefix;
+    if (prefix == removeEnd && insertLength == 0) {
+        return;
+    }
+
+    KillTimer(g_panel, kUpdateTimer);  // the page is already up to date
+    g_applyingPageEdit = true;
+    SendMessageW(sci, SCI_BEGINUNDOACTION, 0, 0);
+    SendMessageW(sci, SCI_SETTARGETRANGE, (WPARAM)prefix, (LPARAM)removeEnd);
+    SendMessageW(sci, SCI_REPLACETARGET, (WPARAM)insertLength, (LPARAM)(next.data() + prefix));
+    SendMessageW(sci, SCI_ENDUNDOACTION, 0, 0);
+    SendMessageW(sci, SCI_GOTOPOS, (WPARAM)(prefix + insertLength), 0);  // shows the edited place in the editor
+    g_applyingPageEdit = false;
+    Log(L"page edit: replaced %d bytes at %d with %d bytes", (int)(removeEnd - prefix), (int)prefix, (int)insertLength);
+
+    if (lossy) {
+        SendDocument();  // the document's encoding could not hold some typed characters
+    }
 }
 
 void ScheduleUpdate() {
@@ -303,7 +394,8 @@ void ScheduleUpdate() {
 }
 
 void SendSettings() {
-    PostJson(std::wstring(L"{\"type\":\"settings\",\"dark\":") + (g_dark ? L"true" : L"false") + L"}");
+    PostJson(std::wstring(L"{\"type\":\"settings\",\"dark\":") + (g_dark ? L"true" : L"false") +
+             L",\"editable\":" + (g_editable ? L"true" : L"false") + L"}");
 }
 
 // ---------------------------------------------------------------- PDF export
@@ -366,8 +458,13 @@ void ReportInitError(HRESULT hr) {
 
 void HandlePageMessage(const std::wstring& message) {
     Log(L"page message: %.300s", message.c_str());
-    Log(L"doc dir=%s", g_docDir.c_str());
-    if (message == L"ready") {
+    if (message.compare(0, 5, L"edit:") == 0) {
+        ApplyPageEdit(message.substr(5));
+    } else if (message == L"undo" || message == L"redo") {
+        SendMessageW(CurrentScintilla(), message == L"undo" ? SCI_UNDO : SCI_REDO, 0, 0);
+    } else if (message == L"save") {
+        NppSend(NPPM_SAVECURRENTFILE);
+    } else if (message == L"ready") {
         g_pageReady = true;
         g_lastPpm = -1;
         g_docDir.clear();
@@ -647,6 +744,13 @@ void CmdDark() {
     SendSettings();
 }
 
+void CmdEditable() {
+    g_editable = !g_editable;
+    SetMenuCheck(CMD_EDIT, g_editable);
+    SaveSettings();
+    SendSettings();
+}
+
 void CmdExportPdf() {
     if (!g_visible) {
         ShowPanel();
@@ -686,6 +790,7 @@ void CmdAbout() {
     MessageBoxW(g_npp._nppHandle,
                 L"MD Notepad - Markdown live preview for Notepad++\n\n"
                 L"Live preview of the current document in a docked panel.\n"
+                L"Text can also be edited in the preview; the change goes into the document.\n"
                 L"Rendering: marked, DOMPurify, Mermaid, GitHub Markdown CSS.\n"
                 L"Panel engine: Microsoft Edge WebView2.",
                 kPluginName, MB_OK | MB_ICONINFORMATION);
@@ -768,6 +873,7 @@ __declspec(dllexport) FuncItem* getFuncsArray(int* count) {
     InitFuncItem(CMD_TOGGLE, L"Show/hide preview panel", CmdToggle, false, &g_toggleKey);
     InitFuncItem(CMD_SYNC, L"Sync scroll", CmdSyncScroll, g_syncScroll, nullptr);
     InitFuncItem(CMD_DARK, L"Dark theme", CmdDark, g_dark, nullptr);
+    InitFuncItem(CMD_EDIT, L"Edit in preview", CmdEditable, g_editable, nullptr);
     InitFuncItem(CMD_SEPARATOR, L"-", nullptr, false, nullptr);
     InitFuncItem(CMD_PDF, L"Export PDF...", CmdExportPdf, false, nullptr);
     InitFuncItem(CMD_ABOUT, L"About", CmdAbout, false, nullptr);
@@ -806,8 +912,8 @@ __declspec(dllexport) void beNotified(SCNotification* notification) {
         return;
     }
 
-    if (!g_visible || !g_pageReady) {
-        return;
+    if (!g_visible || !g_pageReady || g_applyingPageEdit) {
+        return;  // a change that came from the preview is not sent back to it
     }
     if (from != g_npp._scintillaMainHandle && from != g_npp._scintillaSecondHandle) {
         return;

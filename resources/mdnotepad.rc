@@ -1,2 +1,43 @@
+// Resources of mdnotepad.dll. build.ps1 passes the version from package.json as VER_MAJOR, VER_MINOR, VER_PATCH
+// (Plugins Admin compares the DLL's file version with the version in the Notepad++ plugin list).
+#include <winver.h>
+
+#ifndef VER_MAJOR
+#define VER_MAJOR 0
+#define VER_MINOR 0
+#define VER_PATCH 0
+#endif
+#define VER_STR2(a, b, c) #a "." #b "." #c ".0"
+#define VER_STR(a, b, c) VER_STR2(a, b, c)
+
 // Toolbar icon of the plugin (see tools/make_icon.py). The id is IDI_TOOLBAR in src/plugin.cpp.
 101 ICON "mdnotepad.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION VER_MAJOR, VER_MINOR, VER_PATCH, 0
+PRODUCTVERSION VER_MAJOR, VER_MINOR, VER_PATCH, 0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_DLL
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "aideakit"
+            VALUE "FileDescription", "MD Notepad - Markdown preview plugin for Notepad++"
+            VALUE "FileVersion", VER_STR(VER_MAJOR, VER_MINOR, VER_PATCH)
+            VALUE "InternalName", "mdnotepad"
+            VALUE "LegalCopyright", "MIT License"
+            VALUE "OriginalFilename", "mdnotepad.dll"
+            VALUE "ProductName", "MD Notepad"
+            VALUE "ProductVersion", VER_STR(VER_MAJOR, VER_MINOR, VER_PATCH)
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

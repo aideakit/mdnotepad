@@ -15,6 +15,33 @@ html[data-theme="dark"] body {
   padding: 8px 16px 16px;
 }
 
+/* Editing in the preview: the whole panel area takes clicks, no focus frame. */
+#output[contenteditable="true"] {
+  min-height: calc(100vh - 24px);
+  outline: none;
+}
+
+/* Invisible markers of the top-level blocks (used to map the preview back to the source). */
+.markdown-body span[data-b] {
+  display: none;
+}
+
+/* Set by the page on the first element (a sibling selector here would make every edit re-style the whole page). */
+.markdown-body > .md-first {
+  margin-top: 0 !important;
+}
+
+/* The links stay links: Ctrl+click opens them while the preview is editable. */
+#output[contenteditable="true"] a {
+  cursor: text;
+}
+
+/* Diagrams are not edited in the preview. */
+#output[contenteditable="true"] .mermaid {
+  cursor: default;
+  user-select: none;
+}
+
 .markdown-body .mermaid {
   padding: 16px;
   overflow-x: auto;
