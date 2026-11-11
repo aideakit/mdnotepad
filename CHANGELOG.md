@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Works with the 32-bit (x86) Notepad++ too, not only the 64-bit one
+- One archive for people, `MDNotepad-<version>.zip`: the installer picks the plugin that matches Notepad++
+- Plugins Admin archives for both: `mdnotepad-<version>-x64-plugins-admin.zip` and `...-x86-...`
+
 ## 1.0.0
 
 First release.

@@ -1,4 +1,5 @@
-# MD Notepad installer: copies the plugin folder (next to this script) into <Notepad++>\plugins\mdnotepad.
+# MD Notepad installer: copies the plugin folder (next to this script) and the mdnotepad.dll that matches Notepad++
+# (bin\x64 for 64-bit, bin\x86 for 32-bit) into <Notepad++>\plugins\mdnotepad.
 #
 #   install.cmd                         double-click; finds Notepad++ by itself
 #   install.cmd -NppDir "D:\Tools\npp"  a specific (for example portable) Notepad++
@@ -7,7 +8,7 @@
 # Exit codes: 0 installed, 1 error, 2 Notepad++ is running (close it and run again), 3 Notepad++ folder not found or
 # not unique (pass -NppDir).
 #
-# Checks: Notepad++ is 64-bit, it is closed, the WebView2 Runtime is present. Asks for administrator rights only when
+# Checks: Notepad++ is 64-bit or 32-bit (not ARM64), it is closed, the WebView2 Runtime is present. Asks for administrator rights only when
 # the Notepad++ folder is not writable (for example under Program Files). Updating replaces the plugin's files; files
 # of an older version that the new one no longer has are removed from plugins\mdnotepad\web.
 # Written for Windows PowerShell 5.1 (preinstalled), also runs in PowerShell 7.
@@ -19,6 +20,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $package = Join-Path $PSScriptRoot 'mdnotepad'
+$bin = Join-Path $PSScriptRoot 'bin'
 
 function Say([string]$text, [string]$color = 'Gray') { Write-Host $text -ForegroundColor $color }
 function Finish([int]$code) {
@@ -105,8 +107,8 @@ function Get-RunningNpp([string]$dir) {
 
 # ---------------------------------------------------------------------------- checks
 
-if (-not (Test-Path -LiteralPath (Join-Path $package 'mdnotepad.dll'))) {
-    Fail "the plugin folder '$package' is missing. Unpack the whole archive and run install.cmd from it."
+if (-not (Test-Path -LiteralPath (Join-Path $package 'web\index.html')) -or -not (Test-Path -LiteralPath $bin)) {
+    Fail "the plugin files next to '$PSCommandPath' are missing. Unpack the whole archive and run install.cmd from it."
 }
 if ($NppDir) {
     if (-not (Test-NppDir $NppDir)) { Fail "notepad++.exe not found in '$NppDir'." }
@@ -116,9 +118,12 @@ if ($NppDir) {
 }
 Say "Notepad++: $NppDir"
 
-if ((Get-ExeMachine (Join-Path $NppDir 'notepad++.exe')) -ne 0x8664) {
-    Fail 'this Notepad++ is 32-bit; MD Notepad needs the 64-bit Notepad++ (x64).'
-}
+$machine = Get-ExeMachine (Join-Path $NppDir 'notepad++.exe')
+$arch = switch ($machine) { 0x8664 { 'x64' } 0x14C { 'x86' } default { '' } }
+if (-not $arch) { Fail ('this Notepad++ is for ARM64 or another processor (machine 0x{0:X}); MD Notepad supports 64-bit (x64) and 32-bit (x86) Notepad++.' -f $machine) }
+$dll = Join-Path $bin "$arch\mdnotepad.dll"
+if (-not (Test-Path -LiteralPath $dll)) { Fail "'$dll' is missing. Unpack the whole archive and run install.cmd from it." }
+Say "Notepad++ type: $(if ($arch -eq 'x64') { '64-bit' } else { '32-bit' })"
 
 $webView2 = Test-WebView2
 if ($webView2) {
@@ -153,7 +158,10 @@ $update = (Test-Path -LiteralPath (Join-Path $target 'mdnotepad.dll'))
 try {
     if ($PSCmdlet.ShouldProcess($target, 'Copy plugin files')) {
         New-Item -ItemType Directory -Force -Path $target | Out-Null
-        Copy-Item -Path (Join-Path $package '*') -Destination $target -Recurse -Force
+        # the shared files, then the DLL of the right type (a DLL in the shared folder, e.g. from an old build, is skipped)
+        Get-ChildItem -LiteralPath $package | Where-Object { $_.Name -ne 'mdnotepad.dll' } |
+            Copy-Item -Destination $target -Recurse -Force
+        Copy-Item -LiteralPath $dll -Destination (Join-Path $target 'mdnotepad.dll') -Force
     }
 } catch {
     Fail "copying failed: $($_.Exception.Message)"

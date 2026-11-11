@@ -1,7 +1,7 @@
 {
   "name": "mdnotepad",
-  "version": "1.0.0",
-  "description": "Live Markdown preview plugin for Notepad++ (x64, WebView2)",
+  "version": "1.0.1",
+  "description": "Live Markdown preview plugin for Notepad++ (x64 and x86, WebView2)",
   "private": true,
   "license": "MIT",
   "scripts": {

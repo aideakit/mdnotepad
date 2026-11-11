@@ -1,8 +1,10 @@
-# Builds the plugin into dist\ (x64 only):
-#   dist\mdnotepad\                                the plugin folder (mdnotepad.dll + web\)
-#   dist\MDNotepad-<version>-x64.zip               for people: mdnotepad\ + install.cmd + install.ps1
-#   dist\mdnotepad-<version>-x64-plugins-admin.zip for the Notepad++ plugin list (mdnotepad.dll at the zip root)
-#   dist\SHA256SUMS.txt, dist\pl.x64-entry.json    checksums; the entry for src/pl.x64.json of nppPluginList
+# Builds the plugin into dist\ for 64-bit (x64) and 32-bit (x86) Notepad++:
+#   dist\mdnotepad\                                     the plugin's shared files (web\, licenses), no DLL
+#   dist\bin\x64\mdnotepad.dll, dist\bin\x86\mdnotepad.dll
+#   dist\MDNotepad-<version>.zip                        for people: mdnotepad\ + bin\ + install.cmd + install.ps1;
+#                                                       install.ps1 picks the DLL that matches Notepad++
+#   dist\mdnotepad-<version>-<arch>-plugins-admin.zip   for the Notepad++ plugin list (mdnotepad.dll at the zip root)
+#   dist\SHA256SUMS.txt, dist\pl.<arch>-entry.json      checksums; the entries for src/pl.<arch>.json of nppPluginList
 #
 #   pwsh -File build.ps1 [-VcVars <path to vcvars64.bat>] [-Install [-NppDir <Notepad++ folder>]]
 # Needs Node.js (npm) and Visual Studio Build Tools with the C++ workload and a Windows SDK.
@@ -72,22 +74,32 @@ if (-not $VcVars) {
 }
 if (-not $VcVars -or -not (Test-Path $VcVars)) { throw 'vcvars64.bat not found; pass -VcVars <path>' }
 
-$dll = Join-Path $out 'mdnotepad.dll'
-$cmd = "`"$VcVars`" >nul && rc /nologo $verDefines /fo `"$obj\mdnotepad.res`" `"$root\resources\mdnotepad.rc`" && cl /nologo /std:c++17 /O2 /MT /EHsc /W3 /LD " +
-    "/I `"$wv2\include`" `"$root\src\plugin.cpp`" /Fo`"$obj\\`" /Fe`"$dll`" " +
-    "/link /nologo /IMPLIB:`"$obj\mdnotepad.lib`" `"$obj\mdnotepad.res`" `"$wv2\x64\WebView2LoaderStatic.lib`" " +
-    "user32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib comdlg32.lib gdi32.lib version.lib"
-cmd /c $cmd
-if ($LASTEXITCODE -ne 0) { throw 'cl failed' }
+$vcvarsAll = Join-Path (Split-Path $VcVars) 'vcvarsall.bat'
+if (-not (Test-Path $vcvarsAll)) { throw "vcvarsall.bat not found next to $VcVars" }
+$dist = Split-Path $out
+$archs = [ordered]@{ 'x64' = 'amd64'; 'x86' = 'amd64_x86' }   # <plugin list arch> = <vcvarsall argument>
+$dlls = @{}
+foreach ($arch in $archs.Keys) {
+    $archObj = Join-Path $obj $arch
+    $binDir = Join-Path $dist "bin\$arch"
+    New-Item -ItemType Directory -Force $archObj, $binDir | Out-Null
+    $dll = Join-Path $binDir 'mdnotepad.dll'
+    $cmd = "`"$vcvarsAll`" $($archs[$arch]) >nul 2>nul && rc /nologo $verDefines /fo `"$archObj\mdnotepad.res`" `"$root\resources\mdnotepad.rc`" && " +
+        "cl /nologo /std:c++17 /O2 /MT /EHsc /W3 /LD /I `"$wv2\include`" `"$root\src\plugin.cpp`" /Fo`"$archObj\\`" /Fe`"$dll`" " +
+        "/link /nologo /IMPLIB:`"$archObj\mdnotepad.lib`" `"$archObj\mdnotepad.res`" `"$wv2\$arch\WebView2LoaderStatic.lib`" " +
+        "user32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib comdlg32.lib gdi32.lib version.lib"
+    cmd /c $cmd
+    if ($LASTEXITCODE -ne 0) { throw "cl failed ($arch)" }
+    $dlls[$arch] = $dll
+    Write-Host "Built: $dll"
+}
 
 Copy-Item (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD-PARTY-NOTICES.md') $out -Force
-Write-Host "Built: $out"
 
-# --- 5. Archives, checksums and the plugin list entry
+# --- 5. Archives, checksums and the plugin list entries
 # Only the files of this build go in (dist\mdnotepad\web may still hold script parts of older builds).
-$dist = Split-Path $out
 Copy-Item (Join-Path $root 'installer\install.cmd'), (Join-Path $root 'installer\install.ps1') $dist -Force
-$files = @('mdnotepad.dll', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'web\index.html', 'web\preview.css',
+$files = @('LICENSE', 'THIRD-PARTY-NOTICES.md', 'web\index.html', 'web\preview.css',
     'web\github-markdown-light.css', 'web\github-markdown-dark-dimmed.css')
 $outputs = (Get-Content $meta -Raw | ConvertFrom-Json).outputs.PSObject.Properties.Name
 foreach ($o in $outputs) {
@@ -110,35 +122,40 @@ function New-Zip([string]$path, $entries) {
     }
 }
 $people = [ordered]@{}
-$pluginsAdmin = [ordered]@{}
-foreach ($f in $files) {
-    $people['mdnotepad/' + ($f -replace '\\', '/')] = Join-Path $out $f
-    $pluginsAdmin[($f -replace '\\', '/')] = Join-Path $out $f   # Plugins Admin unpacks into plugins\mdnotepad\
-}
+foreach ($f in $files) { $people['mdnotepad/' + ($f -replace '\\', '/')] = Join-Path $out $f }
+foreach ($arch in $archs.Keys) { $people["bin/$arch/mdnotepad.dll"] = $dlls[$arch] }
 $people['install.cmd'] = Join-Path $dist 'install.cmd'
 $people['install.ps1'] = Join-Path $dist 'install.ps1'
-$zipPeople = "MDNotepad-$version-x64.zip"
-$zipAdmin = "mdnotepad-$version-x64-plugins-admin.zip"
+$zipPeople = "MDNotepad-$version.zip"
 New-Zip (Join-Path $dist $zipPeople) $people
-New-Zip (Join-Path $dist $zipAdmin) $pluginsAdmin
+Write-Host "Archive: dist\$zipPeople ($($people.Count) files)"
+$zips = @($zipPeople)
 
-$sums = foreach ($z in $zipPeople, $zipAdmin) {
+foreach ($arch in $archs.Keys) {
+    $pluginsAdmin = [ordered]@{ 'mdnotepad.dll' = $dlls[$arch] }   # Plugins Admin unpacks into plugins\mdnotepad\
+    foreach ($f in $files) { $pluginsAdmin[($f -replace '\\', '/')] = Join-Path $out $f }
+    $zipAdmin = "mdnotepad-$version-$arch-plugins-admin.zip"
+    New-Zip (Join-Path $dist $zipAdmin) $pluginsAdmin
+    $zips += $zipAdmin
+    $entry = [ordered]@{
+        'folder-name'  = 'mdnotepad'
+        'display-name' = 'MD Notepad'
+        'version'      = $version
+        'id'           = (Get-FileHash (Join-Path $dist $zipAdmin) -Algorithm SHA256).Hash.ToLowerInvariant()
+        'repository'   = "$repository/releases/download/v$version/$zipAdmin"
+        'description'  = 'Markdown preview panel next to the editor: GitHub style, Mermaid diagrams, dark theme, PDF export. Text can be edited in the preview too; the change goes into the Markdown source. Uses the Microsoft Edge WebView2 Runtime that is part of Windows 10/11.'
+        'author'       = 'aideakit'
+        'homepage'     = $repository
+    }
+    [System.IO.File]::WriteAllText((Join-Path $dist "pl.$arch-entry.json"), ($entry | ConvertTo-Json) + "`n")
+    Write-Host "Archive: dist\$zipAdmin ($($pluginsAdmin.Count) files); plugin list entry: dist\pl.$arch-entry.json"
+}
+
+$sums = foreach ($z in $zips) {
     '{0}  {1}' -f (Get-FileHash (Join-Path $dist $z) -Algorithm SHA256).Hash.ToLowerInvariant(), $z
 }
 [System.IO.File]::WriteAllText((Join-Path $dist 'SHA256SUMS.txt'), ($sums -join "`n") + "`n")
-$entry = [ordered]@{
-    'folder-name'  = 'mdnotepad'
-    'display-name' = 'MD Notepad'
-    'version'      = $version
-    'id'           = (Get-FileHash (Join-Path $dist $zipAdmin) -Algorithm SHA256).Hash.ToLowerInvariant()
-    'repository'   = "$repository/releases/download/v$version/$zipAdmin"
-    'description'  = 'Markdown preview panel next to the editor: GitHub style, Mermaid diagrams, dark theme, PDF export. Text can be edited in the preview too; the change goes into the Markdown source. Uses the Microsoft Edge WebView2 Runtime that is part of Windows 10/11.'
-    'author'       = 'aideakit'
-    'homepage'     = $repository
-}
-[System.IO.File]::WriteAllText((Join-Path $dist 'pl.x64-entry.json'), ($entry | ConvertTo-Json) + "`n")
-Write-Host "Archives: dist\$zipPeople ($($people.Count) files), dist\$zipAdmin ($($pluginsAdmin.Count) files)"
-Write-Host 'Checksums: dist\SHA256SUMS.txt; plugin list entry: dist\pl.x64-entry.json'
+Write-Host 'Checksums: dist\SHA256SUMS.txt'
 
 if ($Install) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $dist 'install.ps1'))

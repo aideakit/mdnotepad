@@ -2,10 +2,11 @@
 #
 #   irm https://raw.githubusercontent.com/aideakit/mdnotepad/main/installer/get.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/aideakit/mdnotepad/main/installer/get.ps1))) -Quiet
-#   powershell -ExecutionPolicy Bypass -File get.ps1 [-NppDir <folder>] [-Quiet] [-Version 1.0.0] [-ZipPath <local zip>]
+#   powershell -ExecutionPolicy Bypass -File get.ps1 [-NppDir <folder>] [-Quiet] [-Version 1.0.1] [-ZipPath <local zip>]
 #
 # -Quiet, -NppDir: passed to install.ps1 (see there; exit codes 2 = Notepad++ is running, 3 = folder not found).
-# -ZipPath: install from an already downloaded MDNotepad-<version>-x64.zip instead of downloading.
+# -ZipPath: install from an already downloaded MDNotepad-<version>.zip instead of downloading.
+# The archive holds the plugin for 64-bit and 32-bit Notepad++ (releases before 1.0.1: MDNotepad-<version>-x64.zip).
 # The download goes to a new folder in %TEMP% and is left there.
 # Written for Windows PowerShell 5.1 (preinstalled), also runs in PowerShell 7.
 param(
@@ -39,9 +40,11 @@ function Install-MdNotepad {
             return 1
         }
         if ($release -is [string]) { $release = $release | ConvertFrom-Json }
-        $asset = $release.assets | Where-Object { $_.name -like 'MDNotepad-*-x64.zip' } | Select-Object -First 1
+        # case-sensitive: the plugin list archives are named mdnotepad-<version>-<arch>-plugins-admin.zip
+        $asset = @($release.assets | Where-Object { $_.name -cmatch '^MDNotepad-\d+\.\d+\.\d+\.zip$' }) +
+            @($release.assets | Where-Object { $_.name -cmatch '^MDNotepad-\d+\.\d+\.\d+-x64\.zip$' }) | Select-Object -First 1
         if (-not $asset) {
-            Write-Host "ERROR: release $($release.tag_name) has no MDNotepad-*-x64.zip file." -ForegroundColor Red
+            Write-Host "ERROR: release $($release.tag_name) has no MDNotepad-<version>.zip file." -ForegroundColor Red
             return 1
         }
         $work = Join-Path $env:TEMP ("mdnotepad-" + $release.tag_name + "-" + [guid]::NewGuid().ToString('N').Substring(0, 8))

@@ -12,7 +12,7 @@ ways: type in the editor and the preview updates; type in the preview and the Ma
 
 ## Install
 
-**You don't need to install anything else on Windows. All you need is Notepad++** (the standard 64-bit version).
+**You don't need to install anything else on Windows. All you need is Notepad++** (64-bit or 32-bit).
 No Node.js, Python or other programs: everything the plugin uses is already part of Windows 10 and 11.
 
 Choose any of the four ways:
@@ -40,7 +40,8 @@ To update later, run `git pull` and `.\install.cmd` again. To compile the plugin
 
 ### 2. Download and run the installer
 
-1. Download `MDNotepad-<version>-x64.zip` from the [latest release](https://github.com/aideakit/mdnotepad/releases/latest).
+1. Download `MDNotepad-<version>.zip` from the [latest release](https://github.com/aideakit/mdnotepad/releases/latest).
+   One archive serves both 64-bit and 32-bit Notepad++.
 2. Unpack it anywhere.
 3. Double-click **`install.cmd`**. If Windows asks whether to run the file, choose **Run**.
 
@@ -50,12 +51,14 @@ archive.
 <details>
 <summary>What the installer does, and installing by hand</summary>
 
-It checks that Notepad++ is 64-bit and that the WebView2 component of Windows is present, then copies the plugin to
-`<Notepad++>\plugins\mdnotepad`. If Notepad++ is under `Program Files`, Windows asks for administrator rights.
+It checks whether Notepad++ is 64-bit or 32-bit and that the WebView2 component of Windows is present, then copies
+the plugin of the matching type to `<Notepad++>\plugins\mdnotepad`. If Notepad++ is under `Program Files`, Windows asks
+for administrator rights.
 
 - Several copies of Notepad++, or a portable one: `install.cmd -NppDir "D:\Tools\Notepad++"`
-- By hand: close Notepad++ and copy the `mdnotepad` folder from the archive into `<Notepad++>\plugins\`, so that you
-  get `plugins\mdnotepad\mdnotepad.dll` and `plugins\mdnotepad\web\`.
+- By hand: close Notepad++, copy the `mdnotepad` folder from the archive into `<Notepad++>\plugins\`, then copy
+  `bin\x64\mdnotepad.dll` (64-bit Notepad++) or `bin\x86\mdnotepad.dll` (32-bit) into `plugins\mdnotepad\`. You get
+  `plugins\mdnotepad\mdnotepad.dll` and `plugins\mdnotepad\web\`. The 32-bit Notepad++ shows "32-bit" in **? > About**.
 </details>
 
 ### 3. Ask an AI assistant
@@ -96,7 +99,7 @@ In Notepad++ open **Plugins > Plugins Admin...**, find **MD Notepad** on the **A
 
 ### Requirements and removal
 
-- **Notepad++ 64-bit** (tested with 8.9.8). The 32-bit version is not supported.
+- **Notepad++ 64-bit or 32-bit** (tested with 8.9.8). The ARM64 version is not supported.
 - **Windows 10 or 11.** The preview uses Microsoft Edge WebView2, which is part of Windows 11 and up-to-date Windows 10.
   On a rare older system without it, the installer tells you and gives the
   [download link](https://developer.microsoft.com/microsoft-edge/webview2/).
@@ -159,19 +162,21 @@ This is only for developers; using the plugin does not need any of it. Needs Nod
 powershell -ExecutionPolicy Bypass -File build.ps1 -Install
 ```
 
-`-Install` also installs the result into Notepad++ (add `-NppDir "<folder>"` for a specific copy). If the compiler is
-not found automatically, add `-VcVars "<path>\vcvars64.bat"`.
+It builds the plugin for 64-bit and 32-bit Notepad++. `-Install` also installs the result into Notepad++ (add
+`-NppDir "<folder>"` for a specific copy). If the compiler is not found automatically, add
+`-VcVars "<path>\vcvars64.bat"` (`vcvarsall.bat` must be in the same folder).
 
 The first run installs the npm packages and downloads the `Microsoft.Web.WebView2` NuGet package (pinned version,
 SHA-256 checked) into `third_party\`. The results go to `dist\`:
 
 | File | Purpose |
 |---|---|
-| `mdnotepad\` | The plugin folder |
-| `MDNotepad-<version>-x64.zip` | For people: the plugin folder and the installer |
-| `mdnotepad-<version>-x64-plugins-admin.zip` | For the Notepad++ plugin list (`mdnotepad.dll` at the root of the archive) |
-| `SHA256SUMS.txt` | Checksums of both archives |
-| `pl.x64-entry.json` | The ready entry for the Notepad++ plugin list |
+| `mdnotepad\` | The plugin's shared files (`web\`, licenses) |
+| `bin\x64\`, `bin\x86\` | `mdnotepad.dll` for 64-bit and 32-bit Notepad++ |
+| `MDNotepad-<version>.zip` | For people: the plugin files, both DLLs and the installer |
+| `mdnotepad-<version>-x64-plugins-admin.zip`, `...-x86-...` | For the Notepad++ plugin list (`mdnotepad.dll` at the root of the archive) |
+| `SHA256SUMS.txt` | Checksums of the three archives |
+| `pl.x64-entry.json`, `pl.x86-entry.json` | The ready entries for the Notepad++ plugin lists |
 
 Publishing a new version is described in [docs/RELEASING.md](docs/RELEASING.md).
 

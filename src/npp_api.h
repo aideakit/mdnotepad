@@ -1,4 +1,4 @@
-// Minimal subset of the Notepad++ plugin interface (x64, Unicode) used by this plugin.
+// Minimal subset of the Notepad++ plugin interface (x64 and x86, Unicode) used by this plugin.
 // Values follow PluginInterface.h, Notepad_plus_msgs.h, Docking.h and Scintilla.h of Notepad++ 8.x.
 #pragma once
 #include <windows.h>
