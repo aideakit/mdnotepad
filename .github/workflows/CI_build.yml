@@ -1,0 +1,45 @@
+name: CI_build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+    env:
+      Projectname: mdnotepad
+    strategy:
+      fail-fast: false
+      matrix:
+        build_configuration: [Release]
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v7
+
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v3
+
+
+    - name: Build of plugin dll Release via scripts
+      working-directory: .\
+      run: |
+           .\build.ps1
+
+    - name: Archive artifacts for plugin admin x64
+      uses: actions/upload-artifact@v7
+      with:
+          path: ./dist/${{ env.Projectname }}-*-x64-plugins-admin.zip
+          archive: false
+
+    - name: Archive artifacts for plugin admin x86
+      uses: actions/upload-artifact@v7
+      with:
+          path: ./dist/${{ env.Projectname }}-*-x86-plugins-admin.zip
+          archive: false
+
+    - name: Create release on tagging
+      uses: softprops/action-gh-release@v3
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+          files: ${{ env.Projectname }}-*-plugins-admin.zip
